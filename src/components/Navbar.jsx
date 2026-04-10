@@ -62,13 +62,9 @@ export default function Navbar() {
           style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
           onClick={() => handleNav(NAV_LINKS[0])}
         >
-          <span style={{
-            width: 36, height: 36, borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18,
-            color: 'var(--text-primary)',
-          }}>B</span>
+          <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Best You Version" style={{
+            width: 36, height: 36, borderRadius: '50%', objectFit: 'cover',
+          }} />
           <span style={{
             fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 20,
             color: 'var(--text-secondary)', letterSpacing: '0.02em',
