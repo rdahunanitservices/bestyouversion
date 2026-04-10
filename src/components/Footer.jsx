@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Footer() {
   return (
     <footer style={{
@@ -22,11 +24,17 @@ export default function Footer() {
             Viber · WhatsApp
           </div>
         </div>
-        <div style={{
-          fontFamily: 'var(--font-body)', fontSize: 12,
-          color: 'var(--text-ghost)', alignSelf: 'flex-end',
-        }}>
-          © {new Date().getFullYear()} Best You Version. All rights reserved.
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 8 }}>
+          <Link to="/privacy" style={{
+            fontFamily: 'var(--font-body)', fontSize: 12,
+            color: 'var(--text-faint)', textDecoration: 'none',
+          }}>Data Privacy Notice</Link>
+          <div style={{
+            fontFamily: 'var(--font-body)', fontSize: 12,
+            color: 'var(--text-ghost)',
+          }}>
+            © {new Date().getFullYear()} Best You Version. All rights reserved.
+          </div>
         </div>
       </div>
     </footer>
