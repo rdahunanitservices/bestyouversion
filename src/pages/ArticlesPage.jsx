@@ -122,13 +122,13 @@ export function ArticlePage() {
             fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-muted)',
             marginBottom: 20, maxWidth: 400, margin: '0 auto 20px',
           }}>Book a session with Ade and start your transformative journey.</p>
-          <Link to="/#book" style={{
+          <a href="https://calendly.com/ademarcutang/mental-health-and-well-being-session" target="_blank" rel="noopener noreferrer" style={{
             display: 'inline-block', padding: '14px 36px',
             background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
             color: 'var(--bg-primary)', borderRadius: 'var(--radius-pill)',
             fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: 600,
             textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none',
-          }}>Book a Session</Link>
+          }}>Book a Session</a>
         </div>
       </article>
       <Footer />

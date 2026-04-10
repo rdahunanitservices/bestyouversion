@@ -30,10 +30,6 @@ jobs:
       - run: npm ci
 
       - run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_PAYMONGO_PUBLIC_KEY: ${{ secrets.VITE_PAYMONGO_PUBLIC_KEY }}
 
       # SPA fallback — GitHub Pages returns 404 for client-side routes
       # Copy index.html as 404.html so all routes load the React app

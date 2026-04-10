@@ -4,26 +4,19 @@ import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import About from './components/About'
 import Services from './components/Services'
-import BookingSection from './components/BookingSection'
 import Footer from './components/Footer'
 import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
 import TherapyPage from './pages/TherapyPage'
 import { ArticlesPage, ArticlePage } from './pages/ArticlesPage'
-import { PaymentSuccess, PaymentFailed } from './pages/PaymentResult'
 
 function HomePage() {
-  const scrollToBook = () => {
-    document.getElementById('book')?.scrollIntoView({ behavior: 'smooth' })
-  }
-
   return (
     <>
       <Navbar />
-      <Hero onBook={scrollToBook} />
+      <Hero />
       <About />
       <Services />
-      <BookingSection />
       <Footer />
     </>
   )
@@ -53,8 +46,6 @@ export default function App() {
       <Route path="/articles" element={<ArticlesPage />} />
       <Route path="/articles/:id" element={<ArticlePage />} />
       <Route path="/admin" element={<AdminPage />} />
-      <Route path="/payment/success" element={<PaymentSuccess />} />
-      <Route path="/payment/failed" element={<PaymentFailed />} />
     </Routes>
   )
 }
