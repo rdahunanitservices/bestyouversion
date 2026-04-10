@@ -6,7 +6,7 @@ const NAV_LINKS = [
   { id: 'about', path: '/#about', label: 'About' },
   { id: 'services', path: '/#services', label: 'Services' },
   { id: 'articles', path: '/articles', label: 'Articles', isPage: true },
-  { id: 'book', path: 'https://calendly.com/ademarcutang/mental-health-and-well-being-session', label: 'Book', isExternal: true },
+  { id: 'book', path: '/#book', label: 'Book' },
 ]
 
 export default function Navbar() {
@@ -25,6 +25,13 @@ export default function Navbar() {
     setMobileOpen(false)
     if (link.isExternal) {
       window.open(link.path, '_blank', 'noopener,noreferrer')
+    } else if (link.path === '/') {
+      if (location.pathname === '/') {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        navigate('/')
+        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100)
+      }
     } else if (location.pathname !== '/' && link.path.startsWith('/#')) {
       navigate('/')
       setTimeout(() => {

@@ -75,7 +75,7 @@ export default function TherapyPage() {
             fontFamily: 'var(--font-body)', fontSize: 15, color: 'var(--text-muted)',
             marginBottom: 24, maxWidth: 400, margin: '0 auto 24px',
           }}>Book a consultation session and take the first step toward transformation.</p>
-          <a href="https://calendly.com/ademarcutang/mental-health-and-well-being-session" target="_blank" rel="noopener noreferrer" style={{
+          <a href="/#book" style={{
             display: 'inline-block', padding: '14px 36px',
             background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
             color: 'var(--bg-primary)', borderRadius: 'var(--radius-pill)',

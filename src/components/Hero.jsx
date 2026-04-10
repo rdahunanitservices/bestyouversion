@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export default function Hero() {
+export default function Hero({ onBook }) {
   const [visible, setVisible] = useState(false)
   useEffect(() => { setTimeout(() => setVisible(true), 200) }, [])
 
@@ -54,18 +54,17 @@ export default function Hero() {
         </p>
 
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <a href="https://calendly.com/ademarcutang/mental-health-and-well-being-session" target="_blank" rel="noopener noreferrer" style={{
+          <button onClick={onBook} style={{
             fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600,
             textTransform: 'uppercase', letterSpacing: '0.15em',
             background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
             color: 'var(--bg-primary)', border: 'none', borderRadius: 'var(--radius-pill)',
             padding: '16px 40px', cursor: 'pointer',
             transition: 'transform 0.3s, box-shadow 0.3s',
-            textDecoration: 'none', display: 'inline-block',
           }}
           onMouseEnter={e => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 8px 32px rgba(196,149,106,0.3)' }}
           onMouseLeave={e => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = 'none' }}
-          >Book a Session</a>
+          >Book a Session</button>
 
           <button
             onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
