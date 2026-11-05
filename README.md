@@ -41,8 +41,15 @@ Open http://localhost:3000
 2. Go to **Settings → API** and copy:
    - `Project URL` → paste into `.env` as `VITE_SUPABASE_URL`
    - `anon public` key → paste as `VITE_SUPABASE_ANON_KEY`
-3. Go to **SQL Editor** → paste the contents of `supabase/migrations/001_create_bookings.sql` → Run
+3. Go to **SQL Editor** → run `supabase/migrations/001_create_bookings.sql`, then `supabase/migrations/002_security_hardening.sql` (in that order)
 4. Go to **Authentication → Users** → Click "Add User" → Add your admin email/password
+5. Make that user an admin (signing in alone is not enough). In the **SQL Editor**:
+   ```sql
+   insert into public.admin_users (user_id, note)
+   select id, 'owner' from auth.users where email = 'you@example.com'
+   on conflict (user_id) do nothing;
+   ```
+6. Go to **Authentication → Sign In / Providers** → turn off **Allow new users to sign up** (admins are added in step 4), and enable CAPTCHA if you can
 
 ### Step 2: PayMongo
 
@@ -77,12 +84,15 @@ supabase link --project-ref YOUR_PROJECT_REF
 
 # Set secrets
 supabase secrets set PAYMONGO_SECRET_KEY=sk_test_xxxx
+# Optional: sites PayMongo may send clients back to (default: bestyouversion.com, GitHub Pages, localhost)
+# supabase secrets set ALLOWED_ORIGINS=https://www.bestyouversion.com
 supabase secrets set GOOGLE_CALENDAR_ID=your-email@gmail.com
 supabase secrets set GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
 
 # Deploy functions
 supabase functions deploy create-checkout
-supabase functions deploy paymongo-webhook
+# PayMongo can't send a Supabase JWT; the function checks the Paymongo-Signature instead
+supabase functions deploy paymongo-webhook --no-verify-jwt
 ```
 
 ### Step 5: Set Up PayMongo Webhook
@@ -92,6 +102,7 @@ supabase functions deploy paymongo-webhook
 3. Events: Select `checkout_session.payment.paid`
 4. Save and note the webhook secret
 5. Set it: `supabase secrets set PAYMONGO_WEBHOOK_SECRET=whsk_xxxx`
+   (Required. Without it the webhook rejects every call, and bookings stay "pending payment".)
 
 ### Step 6: Deploy to GitHub Pages
 
@@ -161,16 +172,17 @@ Picks date + time → enters details
     ↓
 Clicks "Pay with PayMongo"
     ↓
-Booking saved to Supabase (status: pending_payment)
+Booking saved via create_booking() (status: pending_payment, price set by the database)
     ↓
-Edge Function creates PayMongo Checkout Session
+Edge Function creates PayMongo Checkout Session (amount read from the booking)
     ↓
 Client redirected to PayMongo (pays via GCash/Maya/Card)
     ↓
 PayMongo sends webhook → paymongo-webhook Edge Function
     ↓
 Edge Function:
-  1. Updates booking status to "confirmed"
+  0. Verifies the Paymongo-Signature, then re-fetches the checkout session from PayMongo
+  1. Updates booking status to "confirmed" (only if the paid amount matches)
   2. Creates Google Calendar event with client details
   3. Sends calendar invite to client's email
     ↓

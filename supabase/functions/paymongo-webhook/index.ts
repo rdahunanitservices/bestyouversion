@@ -1,8 +1,13 @@
 // supabase/functions/paymongo-webhook/index.ts
 // Deploy with: supabase functions deploy paymongo-webhook
 //
+//   PayMongo calls this without a Supabase JWT, so deploy it with:
+//   supabase functions deploy paymongo-webhook --no-verify-jwt
+//   (The Paymongo-Signature check below is what authenticates the caller.)
+//
 // Required secrets:
-//   PAYMONGO_WEBHOOK_SECRET=whsk_xxxx
+//   PAYMONGO_WEBHOOK_SECRET=whsk_xxxx   (from the PayMongo webhook you register)
+//   PAYMONGO_SECRET_KEY=sk_live_xxxx    (used to re-fetch the checkout session)
 //   GOOGLE_CALENDAR_ID=your-calendar@gmail.com
 //   GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 //
@@ -19,7 +24,10 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+import { modeOfSecretKey, verifyPaymongoSignature } from '../_shared/paymongo-signature.ts'
 
+// CORS '*' is harmless here: PayMongo calls this server-to-server and every
+// request must carry a valid signature.
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -170,100 +178,186 @@ async function createCalendarEvent(booking: any): Promise<string | null> {
 
 // ─── Webhook Handler ──────────────────────────────────────────
 
+const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' }
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: jsonHeaders })
+}
+
+type SessionPayment = {
+  id?: string
+  attributes?: {
+    amount?: number
+    currency?: string
+    status?: string
+    source?: { type?: string } | null
+  }
+}
+
+type CheckoutSession = {
+  id: string
+  attributes: {
+    status?: string
+    payment_method_used?: string | null
+    metadata?: { booking_id?: string } | null
+    payments?: SessionPayment[]
+  }
+}
+
+async function getCheckoutSession(checkoutId: string, secretKey: string): Promise<CheckoutSession> {
+  const res = await fetch(`https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(checkoutId)}`, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Basic ${btoa(secretKey + ':')}`,
+    },
+  })
+  if (!res.ok) throw new Error(`PayMongo checkout session lookup failed: ${res.status}`)
+  const body = await res.json()
+  if (!body?.data?.id || !body?.data?.attributes) throw new Error('PayMongo returned an unexpected checkout session')
+  return body.data as CheckoutSession
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+  if (req.method !== 'POST') {
+    return json({ error: 'Method not allowed' }, 405)
+  }
+
+  const webhookSecret = Deno.env.get('PAYMONGO_WEBHOOK_SECRET') ?? ''
+  const paymongoSecret = Deno.env.get('PAYMONGO_SECRET_KEY') ?? ''
+  if (!webhookSecret || !paymongoSecret) {
+    console.error('PAYMONGO_WEBHOOK_SECRET / PAYMONGO_SECRET_KEY not set; refusing webhook')
+    return json({ error: 'Webhook not configured' }, 503)
+  }
+
+  // 1. Verify the signature over the RAW body before trusting anything in it.
+  const rawBody = await req.text()
+  const signatureOk = await verifyPaymongoSignature(
+    rawBody,
+    req.headers.get('paymongo-signature'),
+    webhookSecret,
+    { mode: modeOfSecretKey(paymongoSecret) },
+  )
+  if (!signatureOk) {
+    console.warn('Rejected webhook: missing, stale or invalid Paymongo-Signature')
+    return json({ error: 'Invalid signature' }, 401)
+  }
+
+  let body: any
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    return json({ error: 'Invalid JSON' }, 400)
+  }
+
+  const eventType = body?.data?.attributes?.type
+  console.log('Webhook received:', eventType)
+
+  // We only care about successful payments
+  if (eventType !== 'checkout_session.payment.paid') {
+    return json({ received: true })
+  }
+
+  const checkoutId = body?.data?.attributes?.data?.id
+  if (typeof checkoutId !== 'string' || !/^cs_[A-Za-z0-9]+$/.test(checkoutId)) {
+    return json({ error: 'Missing checkout session id' }, 400)
+  }
 
   try {
-    const body = await req.json()
-    const eventType = body?.data?.attributes?.type
+    // 2. Re-fetch the session with our secret key. Booking id, payment status
+    //    and amount come from PayMongo's API, not from the event body.
+    const session = await getCheckoutSession(checkoutId, paymongoSecret)
+    const bookingId = session.attributes.metadata?.booking_id
+    const payment = (session.attributes.payments ?? []).find((p) => p?.attributes?.status === 'paid')
 
-    console.log('Webhook received:', eventType)
-
-    // We only care about successful payments
-    if (eventType !== 'checkout_session.payment.paid') {
-      return new Response(JSON.stringify({ received: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (!bookingId || !payment) {
+      console.error('Checkout session is not paid or has no booking_id', { checkoutId })
+      return json({ received: true, result: 'not-paid' })
     }
 
-    // Extract payment data
-    const checkoutData = body.data.attributes.data
-    const checkoutId = checkoutData?.id
-    const metadata = checkoutData?.attributes?.metadata
-    const bookingId = metadata?.booking_id
-    const paymentMethod = checkoutData?.attributes?.payment_method_used
-
-    if (!bookingId) {
-      console.error('No booking_id in metadata')
-      return new Response(JSON.stringify({ error: 'Missing booking_id' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Initialize Supabase with service role key
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Get the booking
     const { data: booking, error: fetchError } = await supabase
       .from('bookings')
       .select('*')
       .eq('id', bookingId)
-      .single()
+      .maybeSingle()
 
-    if (fetchError || !booking) {
-      console.error('Booking not found:', bookingId)
-      return new Response(JSON.stringify({ error: 'Booking not found' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (fetchError) throw fetchError
+    if (!booking) {
+      console.error('NEEDS MANUAL REVIEW: paid checkout for unknown booking', { checkoutId, bookingId })
+      return json({ received: true, result: 'not-found' })
     }
 
-    // Skip if already confirmed (idempotency)
-    if (booking.status === 'confirmed') {
-      return new Response(JSON.stringify({ received: true, already_confirmed: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    // Idempotency: PayMongo retries, and this may run twice for one payment.
+    if (booking.status === 'confirmed' || booking.status === 'completed') {
+      return json({ received: true, already_confirmed: true })
     }
 
-    // Create Google Calendar event
-    const calendarEventId = await createCalendarEvent(booking)
+    // 3. Never accept less than the booking's own amount (set server-side).
+    const paidAmount = Number(payment.attributes?.amount ?? 0)
+    const currency = payment.attributes?.currency
+    if (paidAmount < Number(booking.amount) || (currency && currency.toUpperCase() !== 'PHP')) {
+      console.error('NEEDS MANUAL REVIEW: paid amount does not match booking', {
+        checkoutId, bookingId, paidAmount, currency, bookingAmount: booking.amount,
+      })
+      return json({ received: true, result: 'amount-mismatch' })
+    }
 
-    // Update booking status to confirmed
-    const { error: updateError } = await supabase
+    const paymentMethod = session.attributes.payment_method_used || payment.attributes?.source?.type || 'unknown'
+
+    if (booking.status !== 'pending_payment') {
+      // Cancelled while the client was paying. Record the money, but leave it
+      // cancelled: the slot may belong to someone else now. Refund or restore
+      // it from the dashboard.
+      await supabase
+        .from('bookings')
+        .update({ payment_id: checkoutId, payment_method: paymentMethod })
+        .eq('id', bookingId)
+      console.error('NEEDS MANUAL REVIEW: payment received for a cancelled booking', { checkoutId, bookingId })
+      return json({ received: true, result: 'paid-but-cancelled' })
+    }
+
+    // 4. Claim the pending -> confirmed transition atomically, so concurrent
+    //    retries can't both send calendar invites.
+    const { data: claimed, error: updateError } = await supabase
       .from('bookings')
       .update({
         status: 'confirmed',
         payment_id: checkoutId,
-        payment_method: paymentMethod || 'unknown',
-        google_calendar_event_id: calendarEventId,
+        payment_method: paymentMethod,
       })
       .eq('id', bookingId)
+      .eq('status', 'pending_payment')
+      .select('id')
 
     if (updateError) {
       console.error('Failed to update booking:', updateError)
       throw updateError
     }
+    if (!claimed || claimed.length === 0) {
+      return json({ received: true, already_confirmed: true })
+    }
+
+    // Create Google Calendar event
+    const calendarEventId = await createCalendarEvent(booking)
+    if (calendarEventId) {
+      await supabase
+        .from('bookings')
+        .update({ google_calendar_event_id: calendarEventId })
+        .eq('id', bookingId)
+    }
 
     console.log(`Booking ${bookingId} confirmed. Calendar event: ${calendarEventId}`)
-
-    return new Response(
-      JSON.stringify({ success: true, bookingId, calendarEventId }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({ success: true })
 
   } catch (error) {
     console.error('Webhook error:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
+    // 500 makes PayMongo retry later.
+    return json({ error: 'Temporary failure' }, 500)
   }
 })

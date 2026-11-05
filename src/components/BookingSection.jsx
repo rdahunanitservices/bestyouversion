@@ -73,15 +73,7 @@ export default function BookingSection() {
       })
 
       // 2. Create PayMongo checkout session
-      const result = await createCheckoutSession({
-        id: booking.id,
-        amount: 150000,
-        date: format(selectedDate, 'MMM d, yyyy'),
-        time: TIME_LABELS[selectedTime],
-        clientName: name,
-        clientEmail: email,
-        clientPhone: phone,
-      })
+      const result = await createCheckoutSession({ id: booking.id })
 
       // 3. Redirect to PayMongo checkout or show demo message
       if (result.isDemo) {
@@ -92,7 +84,7 @@ export default function BookingSection() {
       }
     } catch (err) {
       console.error('Booking error:', err)
-      setError('Something went wrong. Please try again.')
+      setError(err?.userMessage || 'Something went wrong. Please try again.')
       setPaying(false)
     }
   }

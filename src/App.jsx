@@ -31,7 +31,7 @@ function HomePage() {
 }
 
 function AdminPage() {
-  const { user, loading } = useAuth()
+  const { user, isAdmin, loading, signOut } = useAuth()
 
   if (loading) {
     return (
@@ -43,7 +43,28 @@ function AdminPage() {
     )
   }
 
-  return user ? <AdminDashboard /> : <AdminLogin />
+  if (!user) return <AdminLogin />
+
+  // Signed in, but not on the admin allow-list (public.admin_users).
+  if (!isAdmin) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 16,
+        alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center',
+        background: 'var(--bg-primary)', color: 'var(--text-muted)',
+        fontFamily: 'var(--font-body)', fontSize: 14,
+      }}>
+        <p style={{ margin: 0 }}>This account ({user.email}) does not have admin access.</p>
+        <button onClick={() => signOut().catch(console.error)} style={{
+          padding: '10px 24px', borderRadius: 20, cursor: 'pointer',
+          background: 'transparent', border: '1px solid var(--accent-border-hover)',
+          color: 'var(--accent)', fontFamily: 'var(--font-body)', fontSize: 13,
+        }}>Sign out</button>
+      </div>
+    )
+  }
+
+  return <AdminDashboard />
 }
 
 export default function App() {

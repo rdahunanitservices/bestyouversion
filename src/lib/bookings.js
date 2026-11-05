@@ -11,11 +11,9 @@ const ALL_SLOTS = [
 export async function getAvailableSlots(date) {
   if (!isSupabaseConfigured) return ALL_SLOTS
 
+  // The bookings table is admin-only; this function returns taken slots only.
   const { data: booked, error } = await supabase
-    .from('bookings')
-    .select('time_slot')
-    .eq('booking_date', date)
-    .in('status', ['confirmed', 'pending_payment'])
+    .rpc('get_booked_slots', { p_date: date })
 
   if (error) throw error
 
@@ -42,23 +40,34 @@ export async function createBooking({ date, time, clientName, clientEmail, clien
     }
   }
 
-  const { data, error } = await supabase
-    .from('bookings')
-    .insert({
-      booking_date: date,
-      time_slot: time,
-      client_name: clientName,
-      client_email: clientEmail,
-      client_phone: clientPhone,
-      notes: notes || null,
-      status: 'pending_payment',
-      amount: 150000,
-    })
-    .select()
-    .single()
+  // create_booking() validates the input and sets status/amount server-side.
+  const { data: id, error } = await supabase.rpc('create_booking', {
+    p_date: date,
+    p_time: time,
+    p_name: clientName,
+    p_email: clientEmail,
+    p_phone: clientPhone,
+    p_notes: notes || null,
+  })
 
-  if (error) throw error
-  return data
+  if (error) {
+    const err = new Error(error.message)
+    // Messages raised by create_booking() are written for the visitor.
+    if (error.code === 'P0001') err.userMessage = error.message
+    throw err
+  }
+
+  return {
+    id,
+    booking_date: date,
+    time_slot: time,
+    client_name: clientName,
+    client_email: clientEmail,
+    client_phone: clientPhone,
+    notes: notes || null,
+    status: 'pending_payment',
+    amount: 150000,
+  }
 }
 
 /**

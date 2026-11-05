@@ -1,6 +1,7 @@
 node_modules
 dist
-.env
-.env.local
+# Any env file (.env, .env.local, .env.production, ...) except the template
+.env*
+!.env.example
 .DS_Store
 *.log

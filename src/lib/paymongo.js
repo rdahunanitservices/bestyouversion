@@ -9,14 +9,11 @@ export async function createCheckoutSession(bookingData) {
     return { checkoutUrl: null, isDemo: true }
   }
 
+  // Only the booking id is sent. The Edge Function reads the price and
+  // client details from the booking itself.
   const { data, error } = await supabase.functions.invoke('create-checkout', {
     body: {
       bookingId: bookingData.id,
-      amount: bookingData.amount,
-      description: `Consultation - ${bookingData.date} at ${bookingData.time}`,
-      clientName: bookingData.clientName,
-      clientEmail: bookingData.clientEmail,
-      clientPhone: bookingData.clientPhone,
     },
   })
 
